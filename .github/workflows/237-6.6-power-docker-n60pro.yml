@@ -1,4 +1,4 @@
-name: x86-istore
+name: 2-x86-istore
 
 on:
   repository_dispatch:
@@ -9,12 +9,12 @@ on:
   
 
 env:
-  REPO_URL: https://github.com/immortalwrt/immortalwrt.git
-  REPO_BRANCH: openwrt-24.10
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6.git
+  REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: x86/x86.config
-  DIY_P1_SH: x86/diy1.sh
-  DIY_P2_SH: x86/diy2.sh
+  CONFIG_FILE: 237/6.6.config
+  DIY_P1_SH: 237/diy1.sh
+  DIY_P2_SH: 237/diy2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
@@ -157,8 +157,10 @@ jobs:
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
         cd openwrt/bin/targets/*/*
-        rm -rf packages
+        rm -rf *initramfs*.bin
+        rm -rf *.manifest
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "PACKAGES_DIR=$PWD/packages" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
@@ -168,18 +170,40 @@ jobs:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
+    - name: Package plugins directory
+      id: package_plugins
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      run: |
+        # 检查 packages 目录是否存在
+        if [ -d "${{ env.PACKAGES_DIR }}" ]; then
+          cd ${{ env.PACKAGES_DIR }}
+          # 创建包含所有插件的压缩包
+          tar -czf ${{ github.workspace }}/packages.tar.gz .
+          echo "PACKAGES_TAR=${{ github.workspace }}/packages.tar.gz" >> $GITHUB_ENV
+          echo "status=success" >> $GITHUB_OUTPUT
+        else
+          echo "Packages directory not found!"
+          echo "status=failed" >> $GITHUB_OUTPUT
+        fi
+
     - name: Generate release tag
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "release_tag=$(date +"%Y.%m.%d-%H%M")-X86-6.6" >> $GITHUB_OUTPUT
+        echo "release_tag=$(date +"%Y.%m.%d-%H%M")-padavanonly-6.6-power-docker-netcore-n60pro" >> $GITHUB_OUTPUT
         echo "
-         🈴 固件: x86-6.6
+         🈴 固件: 237-24.10-6.6内核-高功率wifi
+            1: 使用237默认的高功率模板文件编译
+            2: 编译的kmod包不会集成到固件中，如果安装插件缺少从底下的packages
+               的压缩包中解压查找
          
-            1: 新版istore界面
-            2: 添加lucky,openclash,nikki，istore商店,微信推送plus
-            3: 补全docker依赖
-            4: 补全usb网络连接
+         📝 设备: 磊科Netcore N60 Pro
+         
+         🧠 内存: 512MB/2GB
+         
+         💾 存储: 128MB
+         
+         💻 架构: MediaTek MT7986A (Filogic 830)
 
          📂 源码: $REPO_URL
 
@@ -187,13 +211,12 @@ jobs:
 
          ⏱️ 编译时间: $(date +"%Y年%m月%d日 %H时%M分")
 
-         🌐 管理地址: 192.168.2.9
+         🌐 管理地址: 192.168.2.1
 
          👤 用户名: root
 
          🔒 密码: password (或空密码)" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
-
     - name: Upload firmware to release
       uses: softprops/action-gh-release@v1
       if: steps.tag.outputs.status == 'success' && !cancelled()
@@ -202,7 +225,9 @@ jobs:
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
+        files: |
+          ${{ env.FIRMWARE }}/*
+          ${{ env.PACKAGES_TAR }}
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
@@ -218,7 +243,3 @@ jobs:
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
-        
-         curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-         -d chat_id="${CHAT_ID}" \
-         -d text="${MESSAGE}"
