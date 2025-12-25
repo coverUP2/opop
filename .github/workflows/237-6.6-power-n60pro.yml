@@ -1,4 +1,4 @@
-name: 2-x86-istore
+name: 237-6.6-power-n60pro
 
 on:
   repository_dispatch:
